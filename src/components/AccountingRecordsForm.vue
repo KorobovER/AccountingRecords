@@ -23,11 +23,11 @@
           <div class="col-span-1 text-center" role="columnheader">Действия</div>
         </div>
 
-        <div v-if="records.length === 0" class="px-6 py-12 text-center text-gray-500">
+        <div v-if="store.records.length === 0" class="px-6 py-12 text-center text-gray-500">
           Нет учетных записей. Нажмите "+" для добавления.
         </div>
 
-        <div v-for="record in records" :key="record.id" role="rowgroup">
+        <div v-for="record in store.records" :key="record.id" role="rowgroup">
           <div class="grid grid-cols-12 gap-4 px-6 py-4 border-b border-gray-200 items-center hover:bg-gray-50 transition-colors" :class="{ 'bg-red-50': hasErrors(record.id) }" role="row">
             <div class="col-span-2" role="gridcell">
               <input 
@@ -104,56 +104,29 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import type { RecordType, AccountRecord } from '../types'
+import { useAccountStore } from '../stores/accountStore'
+import type { RecordType } from '../types'
 
-const STORAGE_KEY = 'accounting_records'
-const records = ref<AccountRecord[]>([])
+const store = useAccountStore()
 const errors = ref<Record<string, Record<string, boolean>>>({})
 const editingTags = ref<Record<string, string>>({})
 
-const loadFromStorage = () => {
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored) {
-    try {
-      records.value = JSON.parse(stored)
-    } catch (e) {
-      console.error('Failed to load records from storage:', e)
-    }
-  }
-}
-
-const saveToStorage = () => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records.value))
-}
-
 onMounted(() => {
-  loadFromStorage()
+  store.loadFromStorage()
 })
 
 const addNewRecord = () => {
-  const newRecord: AccountRecord = {
-    id: Date.now().toString(),
-    tags: [],
-    type: 'Локальная',
-    login: '',
-    password: ''
-  }
-  records.value.push(newRecord)
-  saveToStorage()
+  store.addRecord()
 }
 
 const deleteRecord = (id: string) => {
-  const index = records.value.findIndex((r: AccountRecord) => r.id === id)
-  if (index !== -1) {
-    records.value.splice(index, 1)
-    delete errors.value[id]
-    delete editingTags.value[id]
-    saveToStorage()
-  }
+  store.deleteRecord(id)
+  delete errors.value[id]
+  delete editingTags.value[id]
 }
 
 const getField = (id: string, field: string): any => {
-  const record = records.value.find((r: AccountRecord) => r.id === id)
+  const record = store.getRecordById(id)
   if (!record) return ''
   if (field === 'tags') {
     return record.tags.map((t: any) => t.text).join('; ')
@@ -169,7 +142,7 @@ const getTagsInput = (id: string): string => {
 }
 
 const updateField = (id: string, field: string, value: string) => {
-  const record = records.value.find((r: AccountRecord) => r.id === id)
+  const record = store.getRecordById(id)
   if (!record) return
 
   if (field === 'tags') {
@@ -196,7 +169,7 @@ const hasErrors = (id: string): boolean => {
 }
 
 const validateRecord = (id: string): boolean => {
-  const record = records.value.find((r: AccountRecord) => r.id === id)
+  const record = store.getRecordById(id)
   if (!record) return false
 
   const recordErrors: Record<string, boolean> = {}
@@ -217,19 +190,19 @@ const validateRecord = (id: string): boolean => {
 }
 
 const validateAndSave = (id: string) => {
-  const record = records.value.find((r: AccountRecord) => r.id === id)
+  const record = store.getRecordById(id)
   if (!record) return
 
-  if (editingTags.value[id] !== undefined) {
-    record.tags = editingTags.value[id]
-      .split(';')
-      .map((tag: string) => tag.trim())
-      .filter((tag: string) => tag.length > 0)
-      .map((tag: string) => ({ text: tag }))
-    delete editingTags.value[id]
-  }
+  const tagsString = editingTags.value[id] !== undefined ? editingTags.value[id] : getField(id, 'tags')
 
+  store.updateRecord(id, {
+    tags: tagsString,
+    type: record.type,
+    login: record.login,
+    password: record.password
+  })
+
+  delete editingTags.value[id]
   validateRecord(id)
-  saveToStorage()
 }
 </script>
